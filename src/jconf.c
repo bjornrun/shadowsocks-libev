@@ -186,7 +186,16 @@ jconf_t *read_jconf(const char* file)
             else if (strcmp(name, "nofile") == 0)
             {
                 conf.nofile = value->u.integer;
+            } 
+            else if (strcmp(name, "start_port") == 0)
+            {
+                conf.start_port = to_string(value);
             }
+            else if (strcmp(name, "end_port") == 0)
+            {
+                conf.end_port = to_string(value);
+            }
+
         }
     }
     else

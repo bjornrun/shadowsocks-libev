@@ -3,6 +3,8 @@
  *
  * Copyright (C) 2013 - 2014, Max Lv <max.c.lv@gmail.com>
  *
+ * Modified 2014 by Bjorn Runaker <bjornrun@gmail.com>
+ *
  * This file is part of the shadowsocks-libev.
  *
  * shadowsocks-libev is free software; you can redistribute it and/or modify
@@ -233,6 +235,8 @@ void usage()
     printf("          [--fast-open]              enable TCP fast open,\n");
     printf("                                     only available on Linux kernel > 3.7.0\n");
     printf("          [--acl <acl_file>]         config file of ACL (Access Control List)\n");
+    printf("          [--port-start <start port>] start of port range to find free listen port\n");
+    printf("          [--port-end <end port>]     end of port range to find free listen port\n");
     printf("\n");
 }
 

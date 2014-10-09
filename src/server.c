@@ -2,6 +2,8 @@
  * server.c - Provide shadowsocks service
  *
  * Copyright (C) 2013 - 2014, Max Lv <max.c.lv@gmail.com>
+ * 
+ * Modified 2014 by Bjorn Runaker <bjornrun@gmail.com> 
  *
  * This file is part of the shadowsocks-libev.
  *
@@ -72,6 +74,9 @@ static int nofile = 0;
 #endif
 static int remote_conn = 0;
 static int server_conn = 0;
+
+static int start_port = -1;
+static int end_port = -1;
 
 int setnonblocking(int fd)
 {
@@ -964,6 +969,8 @@ int main (int argc, char **argv)
     static struct option long_options[] =
     {
         {"fast-open", no_argument, 0,  0 },
+        {"port-start", required_argument, 0, 0 },
+        {"port-end", required_argument, 0, 0 },
         {0,           0,           0,  0 }
     };
 
@@ -972,9 +979,11 @@ int main (int argc, char **argv)
     while ((c = getopt_long(argc, argv, "f:s:p:l:k:t:m:c:i:d:a:uv",
                             long_options, &option_index)) != -1)
     {
+        printf("option_index %d\n", option_index);
         switch (c)
         {
         case 0:
+
             if (option_index == 0)
             {
 #ifdef TCP_FASTOPEN
@@ -983,7 +992,16 @@ int main (int argc, char **argv)
 #else
                 LOGE("tcp fast open is not supported by this environment");
 #endif
+            } else
+            if (option_index == 1) 
+            {
+                start_port = atoi(optarg);
+            } else
+            if (option_index == 2) 
+            {
+                end_port = atoi(optarg);
             }
+
             break;
         case 's':
             server_host[server_num++] = optarg;
@@ -1026,6 +1044,8 @@ int main (int argc, char **argv)
         }
     }
 
+    printf("start %d end %d\n", start_port, end_port);
+
     if (opterr)
     {
         usage();
@@ -1065,6 +1085,12 @@ int main (int argc, char **argv)
             set_nofile(nofile);
         }
 #endif
+    }
+
+    if ((start_port > 0 && end_port <= 0) || (start_port <= 0 && end_port > 0)) {
+        printf("Both start_prot and end_port needs to be specified\n");
+        usage();
+        exit(EXIT_FAILURE);
     }
 
     if (server_num == 0 || server_port == NULL || password == NULL)
