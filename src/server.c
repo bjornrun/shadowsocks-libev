@@ -1093,7 +1093,13 @@ int main (int argc, char **argv)
         exit(EXIT_FAILURE);
     }
 
-    if (server_num == 0 || server_port == NULL || password == NULL)
+    if (server_port != NULL && start_port > 0) {
+        printf("server port can't be set if you want to use a port range\n");
+        usage();
+        exit(EXIT_FAILURE);
+    }
+
+    if (server_num == 0 || (server_port == NULL && start_port <= 0) || password == NULL)
     {
         usage();
         exit(EXIT_FAILURE);
@@ -1134,18 +1140,36 @@ int main (int argc, char **argv)
     {
         int index = --server_num;
         const char* host = server_host[index];
-
-        // Bind to port
+        int success = 1;
         int listenfd;
-        listenfd = create_and_bind(host, server_port);
-        if (listenfd < 0)
-        {
-            FATAL("bind() error..");
+
+        if (start_port > 0) {
+            server_port = itoa(start_port);
         }
-        if (listen(listenfd, SOMAXCONN) == -1)
-        {
-            FATAL("listen() error.");
-        }
+        do {
+            // Bind to port
+            
+            listenfd = create_and_bind(host, server_port);
+            success = 1;
+            if (listenfd < 0)
+            {
+                success = 0;
+            }
+            if (listen(listenfd, SOMAXCONN) == -1)
+            {
+                success = 0;
+            }
+            if (!success) {
+                if (start_port < end_port) {
+                    start_port++;
+                    server_port = itoa(start_port);
+                } else
+                {
+                    FATAL("Out of listen ports!");
+                    exit(1);
+                }
+            }
+        } while (!success);
         setnonblocking(listenfd);
         LOGD("server listening at port %s.", server_port);
 
