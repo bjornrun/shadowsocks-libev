@@ -3,6 +3,8 @@
  *
  * Copyright (C) 2013 - 2015, Max Lv <max.c.lv@gmail.com>
  *
+ * Modified 2014 - 2015 by Bjorn Runaker <bjornrun@gmail.com>
+ *
  * This file is part of the shadowsocks-libev.
  *
  * shadowsocks-libev is free software; you can redistribute it and/or modify
@@ -107,6 +109,9 @@ static int nofile = 0;
 #endif
 static int remote_conn = 0;
 static int server_conn = 0;
+
+static int start_port = -1;
+static int end_port = -1;
 
 static struct cork_dllist connections;
 
@@ -1077,6 +1082,8 @@ int main(int argc, char **argv)
     {
         { "fast-open", no_argument, 0, 0 },
         { "acl",       required_argument, 0, 0 },
+        {"port-start", required_argument, 0, 0 },
+        {"port-end", required_argument, 0, 0 },
         { 0,           0,           0, 0 }
     };
 
@@ -1091,7 +1098,12 @@ int main(int argc, char **argv)
             } else if (option_index == 1) {
                 LOGI("initialize acl...");
                 acl = !init_acl(optarg);
+            } else if (option_index == 2) {
+                start_port = atoi(optarg);
+            } else if (option_index == 3) {
+               end_port = atoi(optarg);
             }
+
             break;
         case 's':
             if (server_num < MAX_REMOTE_NUM) {
@@ -1191,6 +1203,19 @@ int main(int argc, char **argv)
         server_host[server_num++] = NULL;
     }
 
+    if ((start_port > 0 && end_port <= 0) || (start_port <= 0 && end_port > 0)) {
+        printf("Both start_prot and end_port needs to be specified\n");
+        usage();
+        exit(EXIT_FAILURE);
+    }
+
+    if (server_port != NULL && start_port > 0) {
+        printf("server port can't be set if you want to use a port range\n");
+        usage();
+        exit(EXIT_FAILURE);
+    }
+
+
     if (server_num == 0 || server_port == NULL || password == NULL) {
         usage();
         exit(EXIT_FAILURE);
@@ -1261,14 +1286,34 @@ int main(int argc, char **argv)
         const char * host = server_host[index];
 
         // Bind to port
+        int success = 1;
         int listenfd;
-        listenfd = create_and_bind(host, server_port);
-        if (listenfd < 0) {
-            FATAL("bind() error");
+        if (start_port > 0) {
+            server_port = itoa(start_port);
         }
-        if (listen(listenfd, SSMAXCONN) == -1) {
-            FATAL("listen() error");
-        }
+        do {
+            listenfd = create_and_bind(host, server_port);
+            success = 1;
+            if (listenfd < 0)
+            {
+                success = 0;
+            } else
+            if (listen(listenfd, SOMAXCONN) == -1)
+            {
+                success = 0;
+            }
+            if (!success) {
+                if (start_port < end_port) {
+                    start_port++;
+                    server_port = itoa(start_port);
+                } else
+                {
+                    FATAL("Out of listen ports!");
+                    exit(1);
+                }
+            }
+        } while (!success);
+
         setnonblocking(listenfd);
         LOGI("listening at %s:%s", host, server_port);
 

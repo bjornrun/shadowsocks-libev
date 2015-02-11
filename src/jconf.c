@@ -181,7 +181,12 @@ jconf_t *read_jconf(const char * file)
                 conf.nofile = value->u.integer;
             } else if (strcmp(name, "nameserver") == 0) {
                 conf.nameserver = to_string(value);
+            } else if (strcmp(name, "start_port") == 0) {
+               conf.start_port = to_string(value);
+            } else if (strcmp(name, "end_port") == 0) {
+               conf.end_port = to_string(value);
             }
+
         }
     } else {
         FATAL("Invalid config file");
