@@ -37,9 +37,15 @@
 
 #endif
 
+#define DEFAULT_CONF_PATH "/etc/shadowsocks/config.json"
+
 #ifndef SOL_TCP
 #define SOL_TCP IPPROTO_TCP
 #endif
+
+#define TCP_ONLY     0
+#define TCP_AND_UDP  1
+#define UDP_ONLY     3
 
 int init_udprelay(const char *server_host, const char *server_port,
 #ifdef UDPRELAY_LOCAL

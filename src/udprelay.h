@@ -67,17 +67,18 @@ struct query_ctx {
     int addr_header_len;
     char addr_header[384];
     struct server_ctx *server_ctx;
+    struct remote_ctx *remote_ctx;
 };
 #endif
 
 struct remote_ctx {
     ev_io io;
     ev_timer watcher;
+    int af;
     int fd;
     int addr_header_len;
     char addr_header[384];
     struct sockaddr_storage src_addr;
-    struct sockaddr_storage dst_addr;
     struct server_ctx *server_ctx;
 };
 

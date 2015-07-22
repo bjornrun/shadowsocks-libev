@@ -1,3 +1,29 @@
+shadowsocks-libev (2.2.3-1) unstable; urgency=high
+
+  * Fix the multiple UDP source port issue.
+  * Allow working in UDP only mode.
+
+ -- Max Lv <max.c.lv@gmail.com>  Sat, 11 Jul 2015 08:31:02 +0900
+
+shadowsocks-libev (2.2.2-1) unstable; urgency=low
+
+  * Fix the timer of UDP relay.
+  * Check name_len in the header.
+
+ -- Max Lv <max.c.lv@gmail.com>  Mon, 15 Jun 2015 10:26:40 +0900
+
+shadowsocks-libev (2.2.1-1) unstable; urgency=low
+
+  * Fix an issue of UDP relay.
+
+ -- Max Lv <max.c.lv@gmail.com>  Sun, 10 May 2015 21:23:44 +0900
+
+shadowsocks-libev (2.2.0-1) unstable; urgency=low
+
+  * Add TPROXY support in redir mode.
+
+ -- Max Lv <max.c.lv@gmail.com>  Mon, 04 May 2015 02:44:17 -0300
+
 shadowsocks-libev (2.1.4-1) unstable; urgency=low
 
   * Fix a bug of server mode ACL.

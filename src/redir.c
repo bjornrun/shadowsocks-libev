@@ -47,6 +47,7 @@
 
 #include "netutils.h"
 #include "utils.h"
+#include "common.h"
 #include "redir.h"
 
 #ifndef EAGAIN
@@ -79,6 +80,9 @@ static void close_and_free_remote(EV_P_ struct remote *remote);
 static void free_server(struct server *server);
 static void close_and_free_server(EV_P_ struct server *server);
 
+int verbose = 0;
+
+static int mode = TCP_ONLY;
 
 int getdestaddr(int fd, struct sockaddr_storage *destaddr)
 {
@@ -610,7 +614,7 @@ int main(int argc, char **argv)
 
     opterr = 0;
 
-    while ((c = getopt(argc, argv, "f:s:p:l:k:t:m:c:b:a:")) != -1) {
+    while ((c = getopt(argc, argv, "f:s:p:l:k:t:m:c:b:a:uUv")) != -1) {
         switch (c) {
         case 's':
             if (remote_num < MAX_REMOTE_NUM) {
@@ -646,12 +650,27 @@ int main(int argc, char **argv)
         case 'a':
             user = optarg;
             break;
+        case 'u':
+            mode = TCP_AND_UDP;
+            break;
+        case 'U':
+            mode = UDP_ONLY;
+            break;
+        case 'v':
+            verbose = 1;
+            break;
         }
     }
 
     if (opterr) {
         usage();
         exit(EXIT_FAILURE);
+    }
+
+    if (argc == 1) {
+        if (conf_path == NULL) {
+            conf_path = DEFAULT_CONF_PATH;
+        }
     }
 
     if (conf_path != NULL) {
@@ -689,7 +708,7 @@ int main(int argc, char **argv)
     }
 
     if (timeout == NULL) {
-        timeout = "10";
+        timeout = "60";
     }
 
     if (local_addr == NULL) {
@@ -709,18 +728,6 @@ int main(int argc, char **argv)
     LOGI("initialize ciphers... %s", method);
     int m = enc_init(password, method);
 
-    // Setup socket
-    int listenfd;
-    listenfd = create_and_bind(local_addr, local_port);
-    if (listenfd < 0) {
-        FATAL("bind() error");
-    }
-    if (listen(listenfd, SOMAXCONN) == -1) {
-        FATAL("listen() error");
-    }
-    setnonblocking(listenfd);
-    LOGI("listening at %s:%s", local_addr, local_port);
-
     // Setup proxy context
     struct listen_ctx listen_ctx;
     listen_ctx.remote_num = remote_num;
@@ -731,18 +738,46 @@ int main(int argc, char **argv)
                      remote_addr[i].port;
         struct sockaddr_storage *storage = malloc(sizeof(struct sockaddr_storage));
         memset(storage, 0, sizeof(struct sockaddr_storage));
-        if (get_sockaddr(host, port, storage) == -1) {
+        if (get_sockaddr(host, port, storage, 1) == -1) {
             FATAL("failed to resolve the provided hostname");
         }
         listen_ctx.remote_addr[i] = (struct sockaddr *)storage;
     }
     listen_ctx.timeout = atoi(timeout);
-    listen_ctx.fd = listenfd;
     listen_ctx.method = m;
 
     struct ev_loop *loop = EV_DEFAULT;
-    ev_io_init(&listen_ctx.io, accept_cb, listenfd, EV_READ);
-    ev_io_start(loop, &listen_ctx.io);
+
+    if (mode != UDP_ONLY) {
+        // Setup socket
+        int listenfd;
+        listenfd = create_and_bind(local_addr, local_port);
+        if (listenfd < 0) {
+            FATAL("bind() error");
+        }
+        if (listen(listenfd, SOMAXCONN) == -1) {
+            FATAL("listen() error");
+        }
+        setnonblocking(listenfd);
+
+        listen_ctx.fd = listenfd;
+
+        ev_io_init(&listen_ctx.io, accept_cb, listenfd, EV_READ);
+        ev_io_start(loop, &listen_ctx.io);
+    }
+
+    // Setup UDP
+    if (mode != TCP_ONLY) {
+        LOGI("UDP relay enabled");
+        init_udprelay(local_addr, local_port, listen_ctx.remote_addr[0],
+                      get_sockaddr_len(listen_ctx.remote_addr[0]), m, listen_ctx.timeout, NULL);
+    }
+
+    if (mode == UDP_ONLY) {
+        LOGI("TCP relay disabled");
+    }
+
+    LOGI("listening at %s:%s", local_addr, local_port);
 
     // setuid
     if (user != NULL) {

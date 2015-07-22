@@ -36,6 +36,7 @@
 #include <time.h>
 #include <unistd.h>
 #include <getopt.h>
+#include <math.h>
 
 #ifndef __MINGW32__
 #include <netdb.h>
@@ -100,9 +101,11 @@ static void close_and_free_server(EV_P_ struct server *server);
 
 static void server_resolve_cb(struct sockaddr *addr, void *data);
 
-int acl = 0;
 int verbose = 0;
-int udprelay = 0;
+
+static int acl = 0;
+static int mode = TCP_ONLY;
+
 static int fast_open = 0;
 #ifdef HAVE_SETRLIMIT
 static int nofile = 0;
@@ -128,13 +131,14 @@ static void free_connections(struct ev_loop *loop)
     }
 }
 
-static void report_addr(int fd) {
+static void report_addr(int fd)
+{
     struct sockaddr_storage addr;
     socklen_t len = sizeof addr;
     memset(&addr, 0, len);
     int err = getpeername(fd, (struct sockaddr *)&addr, &len);
     if (err == 0) {
-        char peer_name[INET6_ADDRSTRLEN] = {0};
+        char peer_name[INET6_ADDRSTRLEN] = { 0 };
         if (addr.ss_family == AF_INET) {
             struct sockaddr_in *s = (struct sockaddr_in *)&addr;
             dns_ntop(AF_INET, &s->sin_addr, peer_name, INET_ADDRSTRLEN);
@@ -176,12 +180,21 @@ int create_and_bind(const char *host, const char *port)
     int s, listen_sock;
 
     memset(&hints, 0, sizeof(struct addrinfo));
-    hints.ai_family = AF_UNSPEC;                                        /* Return IPv4 and IPv6 choices */
-    hints.ai_socktype = SOCK_STREAM;                                    /* We want a TCP socket */
+    hints.ai_family = AF_UNSPEC;                 /* Return IPv4 and IPv6 choices */
+    hints.ai_socktype = SOCK_STREAM;             /* We want a TCP socket */
     hints.ai_flags = AI_PASSIVE | AI_ADDRCONFIG; /* For wildcard IP address */
     hints.ai_protocol = IPPROTO_TCP;
 
-    s = getaddrinfo(host, port, &hints, &result);
+    for (int i = 1; i < 8; i++) {
+        s = getaddrinfo(host, port, &hints, &result);
+        if (s == 0) {
+            break;
+        } else {
+            sleep(pow(2, i));
+            LOGE("failed to resolve server name, wait %.0f seconds", pow(2, i));
+        }
+    }
+
     if (s != 0) {
         LOGE("getaddrinfo: %s", gai_strerror(s));
         return -1;
@@ -468,6 +481,11 @@ static void server_recv_cb(EV_P_ ev_io *w, int revents)
             if (name_len < r && name_len < 255 && name_len > 0) {
                 memcpy(host, server->buf + offset + 1, name_len);
                 offset += name_len + 1;
+            } else {
+                LOGE("invalid name length: %d", name_len);
+                report_addr(server->fd);
+                close_and_free_server(EV_A_ server);
+                return;
             }
             struct cork_ip ip;
             if (cork_ip_init(&ip, host) != -1) {
@@ -672,7 +690,7 @@ static void server_resolve_cb(struct sockaddr *addr, void *data)
         }
 
         if (acl) {
-            char host[INET6_ADDRSTRLEN] = {0};
+            char host[INET6_ADDRSTRLEN] = { 0 };
             if (addr->sa_family == AF_INET) {
                 struct sockaddr_in *s = (struct sockaddr_in *)addr;
                 dns_ntop(AF_INET, &s->sin_addr, host, INET_ADDRSTRLEN);
@@ -1089,7 +1107,9 @@ int main(int argc, char **argv)
 
     opterr = 0;
 
-    while ((c = getopt_long(argc, argv, "f:s:p:l:k:t:m:c:i:d:a:uv",
+    USE_TTY();
+
+    while ((c = getopt_long(argc, argv, "f:s:p:l:k:t:m:c:i:d:a:uUv",
                             long_options, &option_index)) != -1) {
         switch (c) {
         case 0:
@@ -1141,7 +1161,10 @@ int main(int argc, char **argv)
             user = optarg;
             break;
         case 'u':
-            udprelay = 1;
+            mode = TCP_AND_UDP;
+            break;
+        case 'U':
+            mode = UDP_ONLY;
             break;
         case 'v':
             verbose = 1;
@@ -1152,6 +1175,12 @@ int main(int argc, char **argv)
     if (opterr) {
         usage();
         exit(EXIT_FAILURE);
+    }
+
+    if (argc == 1) {
+        if (conf_path == NULL) {
+            conf_path = DEFAULT_CONF_PATH;
+        }
     }
 
     if (conf_path != NULL) {
@@ -1221,6 +1250,10 @@ int main(int argc, char **argv)
         exit(EXIT_FAILURE);
     }
 
+	if (method == NULL) {
+        method = "table";
+    }
+	
     if (timeout == NULL) {
         timeout = "60";
     }
@@ -1285,13 +1318,9 @@ int main(int argc, char **argv)
         int index = --server_num;
         const char * host = server_host[index];
 
-        // Bind to port
-        int success = 1;
-        int listenfd;
-        if (start_port > 0) {
-            server_port = itoa(start_port);
-        }
-        do {
+        if (mode != UDP_ONLY) {
+            // Bind to port
+            int listenfd;
             listenfd = create_and_bind(host, server_port);
             success = 1;
             if (listenfd < 0)
@@ -1326,19 +1355,24 @@ int main(int argc, char **argv)
         listen_ctx->iface = iface;
         listen_ctx->loop = loop;
 
-        ev_io_init(&listen_ctx->io, accept_cb, listenfd, EV_READ);
-        ev_io_start(loop, &listen_ctx->io);
+            ev_io_init(&listen_ctx->io, accept_cb, listenfd, EV_READ);
+            ev_io_start(loop, &listen_ctx->io);
+        }
 
         // Setup UDP
-        if (udprelay) {
+        if (mode != TCP_ONLY) {
             init_udprelay(server_host[index], server_port, m, atoi(timeout),
-                    iface);
+                          iface);
         }
 
     }
 
-    if (udprelay) {
-        LOGI("udprelay enabled");
+    if (mode != TCP_ONLY) {
+        LOGI("UDP relay enabled");
+    }
+
+    if (mode == UDP_ONLY) {
+        LOGI("TCP relay disabled");
     }
 
     // setuid
@@ -1359,13 +1393,17 @@ int main(int argc, char **argv)
     // Clean up
     for (int i = 0; i <= server_num; i++) {
         struct listen_ctx *listen_ctx = &listen_ctx_list[i];
-        ev_io_stop(loop, &listen_ctx->io);
-        close(listen_ctx->fd);
+        if (mode != UDP_ONLY) {
+            ev_io_stop(loop, &listen_ctx->io);
+            close(listen_ctx->fd);
+        }
     }
 
-    free_connections(loop);
+    if (mode != UDP_ONLY) {
+        free_connections(loop);
+    }
 
-    if (udprelay) {
+    if (mode != TCP_ONLY) {
         free_udprelay();
     }
 

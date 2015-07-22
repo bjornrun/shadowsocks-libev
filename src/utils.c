@@ -63,11 +63,9 @@ void ERROR(const char *s)
 }
 #endif
 
-#ifdef __MINGW32__
+int use_tty = 1;
+
 char *ss_itoa(int i)
-#else
-char *itoa(int i)
-#endif
 {
     /* Room for INT_DIGITS digits, - and '\0' */
     static char buf[INT_DIGITS + 2];
@@ -242,9 +240,14 @@ void usage()
         "                                  not available in server mode\n");
     printf("\n");
     printf(
-        "       [-u]                       enable udprelay mode,\n");
+        "       [-u]                       enable UDP relay,\n");
     printf(
-        "                                  not available in redir mode\n");
+        "                                  TPROXY is required in redir mode\n");
+    printf("\n");
+    printf(
+        "       [-U]                       enable UDP relay and disable TCP relay,\n");
+    printf(
+        "                                  not available in local mode\n");
     printf("\n");
     printf(
         "       [-L <addr>:<port>]         specify destination server address and port\n");
@@ -261,15 +264,14 @@ void usage()
     printf(
         "       [--fast-open]              enable TCP fast open,\n");
     printf(
-        "                                  only available on Linux kernel > 3.7.0\n");
+        "                                  only available in local and server mode,\n");
+    printf(
+        "                                  with Linux kernel > 3.7.0\n");
     printf("\n");
     printf(
         "       [--acl <acl_file>]         config file of ACL (Access Control List)\n");
     printf(
         "                                  only available in local and server mode\n");
-    printf("\n");
-    printf("          [--port-start <start port>] start of port range to find free listen port\n");
-    printf("          [--port-end <end port>]     end of port range to find free listen port\n");
     printf("\n");
     printf(
         "       [-v]                       verbose mode\n");
