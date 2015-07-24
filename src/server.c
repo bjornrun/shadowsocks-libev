@@ -1090,7 +1090,7 @@ int main(int argc, char **argv)
 
     int server_num = 0;
     const char *server_host[MAX_REMOTE_NUM];
-    const char *server_port = NULL;
+     char *server_port = NULL;
 
     char * nameservers[MAX_DNS_NUM + 1];
     int nameserver_num = 0;
@@ -1253,7 +1253,7 @@ int main(int argc, char **argv)
 	if (method == NULL) {
         method = "table";
     }
-	
+
     if (timeout == NULL) {
         timeout = "60";
     }
@@ -1318,9 +1318,18 @@ int main(int argc, char **argv)
         int index = --server_num;
         const char * host = server_host[index];
 
+        int success = 1;
+        int listenfd = -1;
+        if (start_port > 0) {
+            server_port = malloc(80);
+            sprintf(server_port,"%d", start_port);
+//            server_port = itoa(start_port);
+        }
+
+        do {
+
         if (mode != UDP_ONLY) {
             // Bind to port
-            int listenfd;
             listenfd = create_and_bind(host, server_port);
             success = 1;
             if (listenfd < 0)
@@ -1334,16 +1343,22 @@ int main(int argc, char **argv)
             if (!success) {
                 if (start_port < end_port) {
                     start_port++;
-                    server_port = itoa(start_port);
+//                    server_port = itoa(start_port);
+                    sprintf(server_port,"%d", start_port);
                 } else
                 {
                     FATAL("Out of listen ports!");
                     exit(1);
                 }
             }
+          }
         } while (!success);
 
-        setnonblocking(listenfd);
+        if (listenfd != -1) {
+          setnonblocking(listenfd);
+        } else {
+          FATAL("No listen port");
+        }
         LOGI("listening at %s:%s", host, server_port);
 
         struct listen_ctx *listen_ctx = &listen_ctx_list[index];
@@ -1357,7 +1372,7 @@ int main(int argc, char **argv)
 
             ev_io_init(&listen_ctx->io, accept_cb, listenfd, EV_READ);
             ev_io_start(loop, &listen_ctx->io);
-        }
+
 
         // Setup UDP
         if (mode != TCP_ONLY) {

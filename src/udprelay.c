@@ -457,6 +457,7 @@ struct remote_ctx *new_remote(int fd, struct server_ctx *server_ctx)
 {
     struct remote_ctx *ctx = malloc(sizeof(struct remote_ctx));
     memset(ctx, 0, sizeof(struct remote_ctx));
+
     ctx->fd = fd;
     ctx->server_ctx = server_ctx;
     ev_io_init(&ctx->io, remote_recv_cb, fd, EV_READ);
